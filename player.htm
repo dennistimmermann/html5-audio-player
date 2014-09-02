@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+	<meta charset="utf-8">
+	<title>Javascript · Twitter Bootstrap</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="">
+	<meta name="author" content="">
+
+	<!-- Le styles -->
+	<link href="assets/css/bootstrap.css" rel="stylesheet">
+
+	<script type="text/javascript" src="http://platform.twitter.com/widgets.js"></script>
+	<script src="audiojs/audio.min.js"></script>
+	<script src="assets/js/jquery.min.js"></script>
+	<script src="assets/js/jquery-ui.min.js"></script>
+	
+	<script type="text/javascript">
+	$(document).ready(function() {
+		// audiojs.events.ready(function() {
+		// 	var as = audiojs.createAll();
+		// 	});
+
+		var Player = function(playerElement, playerControls) {
+			var events = $(playerElement);
+			var player = events.get(0);
+			var controls = $(playerControls);
+
+			var play = {
+				button: controls.find('.btn-play'),
+				icon: {
+					that: this,
+					set: function(icon) {
+						controls.find('.btn-play i')
+						.removeClass('icon-refresh icon-play icon-pause icon-warning-sign')
+						.addClass('icon-'+icon);
+					}
+				}
+			}
+
+			var volume = {
+				button: controls.find('.btn-volume'),
+				icon: {
+					set: function(icon) {
+						controls.find('.btn-volume i')
+						.removeClass('icon-volume-up icon-volume-down icon-volume-off')
+						.addClass('icon-volume-'+icon);
+					}
+				},
+				bar: controls.find('.bar-volume'),
+				gutter: controls.find('.bar-volume .gutter'),
+				handle: controls.find('.bar-volume .gutter .ui-slider-handle')
+			}
+
+			var progress = {
+				bar: controls.find('.bar-progress'),
+				gutter: controls.find('.bar-progress .gutter'),
+				handle: controls.find('.bar-progress .gutter .ui-slider-handle'),
+				text: controls.find('.btn-time')
+			}
+
+			var variables = {
+				manualSeek: false,
+				prevVolume: 1,
+				timeMode: true
+			}
+
+			controls.removeClass('invisible');
+			events.removeAttr('controls');
+
+			volume.gutter.slider({
+				value: player.volume,
+				step: 0.01,
+				orientation: "horizontal",
+				range: "min",
+				max: 1,
+				animate: true,
+				slide: function(e, ui) {
+					//manualSeek = true;
+					player.volume = ui.value;
+				},
+				change:function(e,ui) {
+					player.volume = ui.value
+				}
+			});
+
+			volume.button.on('click', function() {
+				if(player.volume == 0)
+					volume.gutter.slider('value', variables.prevVolume);
+				else
+					volume.gutter.slider('value', 0);
+			});
+
+			var volumeShow = function () {
+				volume.bar.stop().animate({
+					width: '70px'
+				});
+				volume.handle.stop().fadeIn(10);
+			}
+			var volumeHide = function () {
+				volume.bar.stop().animate({
+					width: '0px',
+				});
+				volume.handle.stop().fadeOut(10);;
+			}
+			volume.bar.hover(volumeShow, volumeHide);
+			volume.button.hover(volumeShow, volumeHide);
+
+			var updateTime = function() {
+				if(variables.timeMode) {
+					var time = parseInt(player.duration - player.currentTime, 10);
+				}
+				else {
+					var time = parseInt(player.currentTime, 10);
+				}
+				var mins = Math.floor(time/60,10);
+				var secs = time - mins*60;
+				var text = (variables.timeMode ? '-' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+				progress.text.html(text);
+			}
+
+			progress.text.on('click', function() {
+				variables.timeMode = !variables.timeMode;
+				updateTime();
+			});			
+
+			events.on('canplay', function() {
+				progress.gutter.removeClass('loading');
+				updateTime();
+				play.icon.set('play');
+				play.button.on('click', function() {
+					if(player.paused)
+						player.play();
+					else
+						player.pause();
+				});
+
+
+				if ((player.buffered != undefined) && (player.buffered.length != 0)) {
+					console.log("buffer supported");
+					//jQuery Bug: no negative values for background position,
+					//hav to work with '+=X' so wen need to have a temporary variable
+					var step = 0;
+					events.on('progress', function() {
+						var add = step = parseInt(((player.buffered.end(0) / player.duration) * 100), 10) - step;
+						progress.gutter.animate({backgroundPositionX: '+='+step}, 'slow');
+					});
+				}
+
+				progress.gutter.slider({
+					value: 0,
+					step: 0.01,
+					orientation: "horizontal",
+					range: "min",
+					max: player.duration,
+					animate: true,
+					slide: function() {
+						variables.manualSeek = true;
+
+					},
+					stop:function(e,ui) {
+						variables.manualSeek = false;      
+						player.currentTime = ui.value;
+						player.play();
+					}
+				});	
+			});
+
+			events.on('volumechange', function() {
+				if(player.volume == 0) {
+					volume.icon.set('off');
+					volume.button.addClass('active');
+				}
+				else {
+					variables.prevVolume = player.volume;
+					if(player.volume < 0.6) {
+						volume.icon.set('down');
+					}
+					else {
+						volume.icon.set('up');
+					}
+					volume.button.removeClass('active');
+				}
+			});
+
+			events.on('ended', function() {
+				play.icon.set('play');
+				player.currentTime = 0;
+			});
+
+			events.on('pause', function() {
+				play.icon.set('play');
+			});
+
+			events.on('playing', function() {
+				play.icon.set('pause');
+			});
+
+			events.on('timeupdate', function() {
+
+				var position = (player.currentTime / player.duration) *100;
+				//progress.gutter.animate({"background-position": ('-'+position+'% 0')}, "slow");
+				
+				if(!variables.manualSeek) {
+					progress.handle.css('left', position+'%');
+				}
+				updateTime();
+
+				// function pad2(number) {
+   
+    //  return (number < 10 ? '0' : '') + number
+
+			});
+
+			events.on('waiting', function() {
+				progress.gutter.addClass('loading');
+			});
+
+			events.on('seeking', function() {
+				progress.gutter.addClass('loading');
+			});
+
+			events.on('seeked', function() {
+				progress.gutter.removeClass('loading');
+			});
+
+			events.on('error', function() {
+				play.icon.set('warning-sign');
+			});
+
+			events.on('emptied', function() {
+				play.icon.set('warning-sign');
+			});
+
+			events.on('abort', function() {
+				play.icon.set('warning-sign');
+			});
+		}
+
+		var myPlayer = new Player($('#audio-player'), $('#player'));
+
+		//javascript vorhanden, anpassen
+
+	});
+
+	</script>
+	<!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+	<!--[if lt IE 9]>
+	  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+	<![endif]-->
+
+	<!-- Le fav and touch icons -->
+  </head>
+
+  <body data-spy="scroll" data-target=".subnav" data-offset="50">
+  	<audio controls="controls" src="http://music.incompetech.com/royaltyfree2/Stormfront.mp3" id="audio-player" preload="auto">nicht unterstützt</audio>
+		<!--<button class="btn btn-inverse btn-xlarge"><i class="icon-play icon-white"></i></button>-->
+		<span  id="player" class="btn-group">
+			<button class="btn btn-inverse btn-play">
+				<i id="icon-play" class="icon-refresh icon-white"></i>
+			</button>
+			<div class="btn btn-inverse bar-progress" style="width:200px;">
+				<span class="gutter loading">
+					<span class="ui-slider-handle"></span>
+				</span>
+			</div>
+			<div class="btn btn-inverse btn-time" style="width: 30px;">
+				0:00
+			</div>
+			<button class="btn btn-inverse btn-shuffle" data-toggle="buttons-checkbox">
+				<i class="icon-random icon-white"></i>
+			</button>
+			<button class="btn btn-inverse btn-repeat" data-toggle="buttons-checkbox">
+				<i class="icon-repeat icon-white"></i>
+			</button>
+			<button class="btn btn-inverse btn-volume">
+				<i id="icon-volume" class="icon-volume-up icon-white"></i>
+			</button>
+			<div class="btn btn-inverse bar-volume">
+				<span class="gutter no-progress">
+					<span class="ui-slider-handle" style="display:none;"></span>
+				</span>
+			</div>
+			
+		</span>
+
+
+
+
+	<div><p>Work in progress, Firefox doesn't support MP3</p><p>music from http://incompetech.com/m/c/royalty-free/index.html?keywords=satiate</p></div>
+
+  </body>
+</html>
